@@ -65,7 +65,39 @@ export type AcpSessionRuntimeOptions = {
   backendExtras?: Record<string, string>;
 };
 
+/**
+ * Session status for lifecycle management.
+ * - active: Normal operational state
+ * - archived: Soft-deleted, hidden from active list but recoverable
+ * - pinned: User-pinned, exempt from auto-cleanup
+ */
+export type SessionStatus = "active" | "archived" | "pinned";
+
 export type SessionEntry = {
+  /**
+   * Session lifecycle status.
+   */
+  status?: SessionStatus;
+  /**
+   * Timestamp (ms) when session was archived.
+   */
+  archivedAt?: number;
+  /**
+   * Optional reason for archiving (user-provided or system-generated).
+   */
+  archivedReason?: string;
+  /**
+   * User-defined tags for organization and filtering.
+   */
+  tags?: string[];
+  /**
+   * User-defined or auto-generated title for the session.
+   */
+  title?: string;
+  /**
+   * Channel binding for isolated sessions (e.g., "feishu", "telegram").
+   */
+  channelBinding?: string;
   /**
    * Last delivered heartbeat payload (used to suppress duplicate heartbeat notifications).
    * Stored on the main session entry.

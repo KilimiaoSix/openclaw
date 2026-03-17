@@ -296,6 +296,14 @@ export type SessionMaintenanceApplyReport = {
 };
 
 export {
+  archiveSession,
+  deleteArchivedSession,
+  listArchivedSessions,
+  pinSession,
+  restoreSession,
+  unpinSession,
+} from "./archive.js";
+export {
   capEntryCount,
   getActiveSessionMaintenanceWarning,
   pruneStaleEntries,
