@@ -13,6 +13,8 @@ export type SessionsProps = {
   limit: string;
   includeGlobal: boolean;
   includeUnknown: boolean;
+  showArchived: boolean;
+  archivedSessions: Array<{ key: string; archivedAt?: number; archivedReason?: string }>;
   basePath: string;
   searchQuery: string;
   sortColumn: "key" | "kind" | "updated" | "tokens";
@@ -43,6 +45,12 @@ export type SessionsProps = {
     },
   ) => void;
   onDelete: (key: string) => void;
+  onArchive: (key: string) => void;
+  onRestore: (key: string) => void;
+  onPin: (key: string) => void;
+  onUnpin: (key: string) => void;
+  onDeleteArchived: (key: string) => void;
+  onToggleArchivedView: () => void;
 };
 
 const THINK_LEVELS = ["", "off", "minimal", "low", "medium", "high", "xhigh"] as const;
@@ -224,6 +232,88 @@ export function renderSessions(props: SessionsProps) {
         </button>
       </div>
 
+      <div class="tabs" style="margin-bottom: 12px; border-bottom: 1px solid var(--border);">
+        <button
+          type="button"
+          class="tab ${!props.showArchived ? "active" : ""}"
+          @click=${props.onToggleArchivedView}
+        >
+          Active
+        </button>
+        <button
+          type="button"
+          class="tab ${props.showArchived ? "active" : ""}"
+          @click=${props.onToggleArchivedView}
+        >
+          Archived (${props.archivedSessions.length})
+        </button>
+      </div>
+
+      ${
+        props.showArchived
+          ? html`
+              <div class="data-table-container">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Key</th>
+                      <th>Archived At</th>
+                      <th>Reason</th>
+                      <th style="width: 120px;"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${
+                      props.archivedSessions.length === 0
+                        ? html`
+                            <tr>
+                              <td colspan="4" style="text-align: center; padding: 48px 16px; color: var(--muted)">
+                                No archived sessions.
+                              </td>
+                            </tr>
+                          `
+                        : props.archivedSessions.map(
+                            (session) => html`
+                              <tr>
+                                <td class="mono" style="font-size: 12px;">${session.key}</td>
+                                <td>
+                                  ${session.archivedAt
+                                    ? formatRelativeTimestamp(session.archivedAt)
+                                    : "n/a"}
+                                </td>
+                                <td>${session.archivedReason ?? "-"}</td>
+                                <td>
+                                  <div class="data-table-row-actions">
+                                    <button
+                                      type="button"
+                                      style="padding: 4px 8px; font-size: 12px; margin-right: 4px;"
+                                      @click=${() => props.onRestore(session.key)}
+                                    >
+                                      Restore
+                                    </button>
+                                    <button
+                                      type="button"
+                                      class="danger"
+                                      style="padding: 4px 8px; font-size: 12px;"
+                                      @click=${() => props.onDeleteArchived(session.key)}
+                                    >
+                                      Delete
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            `,
+                          )
+                    }
+                  </tbody>
+                </table>
+              </div>
+            `
+          : nothing
+      }
+
+      ${!props.showArchived
+        ? html`
       <div class="filters" style="margin-bottom: 12px;">
         <label class="field-inline">
           <span>Active</span>
@@ -290,6 +380,9 @@ export function renderSessions(props: SessionsProps) {
           : nothing
       }
 
+      ${
+        !props.showArchived
+          ? html`
       <div class="data-table-wrapper">
         <div class="data-table-toolbar">
           <div class="data-table-search">
@@ -334,6 +427,8 @@ export function renderSessions(props: SessionsProps) {
                         props.basePath,
                         props.onPatch,
                         props.onDelete,
+                        props.onArchive,
+                        props.onPin,
                         props.onActionsOpenChange,
                         props.actionsOpenKey,
                         props.loading,
@@ -379,6 +474,9 @@ export function renderSessions(props: SessionsProps) {
             : nothing
         }
       </div>
+      `
+          : nothing
+      }
     </section>
   `;
 }
@@ -388,6 +486,8 @@ function renderRow(
   basePath: string,
   onPatch: SessionsProps["onPatch"],
   onDelete: SessionsProps["onDelete"],
+  onArchive: SessionsProps["onArchive"],
+  onPin: SessionsProps["onPin"],
   onActionsOpenChange: (key: string | null) => void,
   actionsOpenKey: string | null,
   disabled: boolean,
@@ -555,6 +655,24 @@ function renderRow(
                           `
                         : nothing
                     }
+                    <button
+                      type="button"
+                      @click=${() => {
+                        onActionsOpenChange(null);
+                        onPin(row.key);
+                      }}
+                    >
+                      ${row.status === "pinned" ? "Unpin" : "Pin"}
+                    </button>
+                    <button
+                      type="button"
+                      @click=${() => {
+                        onActionsOpenChange(null);
+                        onArchive(row.key);
+                      }}
+                    >
+                      Archive
+                    </button>
                     <button
                       type="button"
                       class="danger"

@@ -12,6 +12,8 @@ export type SessionsState = {
   sessionsFilterLimit: string;
   sessionsIncludeGlobal: boolean;
   sessionsIncludeUnknown: boolean;
+  sessionsShowArchived: boolean;
+  sessionsArchived: Array<{ key: string; archivedAt?: number; archivedReason?: string }>;
 };
 
 export async function loadSessions(
@@ -128,4 +130,137 @@ export async function deleteSessionAndRefresh(state: SessionsState, key: string)
   }
   await loadSessions(state);
   return true;
+}
+
+export async function archiveSession(
+  state: SessionsState,
+  key: string,
+  reason?: string,
+): Promise<boolean> {
+  if (!state.client || !state.connected) {
+    return false;
+  }
+  if (state.sessionsLoading) {
+    return false;
+  }
+  state.sessionsLoading = true;
+  state.sessionsError = null;
+  try {
+    await state.client.request("sessions.archive", { key, reason });
+    return true;
+  } catch (err) {
+    state.sessionsError = String(err);
+    return false;
+  } finally {
+    state.sessionsLoading = false;
+  }
+}
+
+export async function archiveSessionAndRefresh(
+  state: SessionsState,
+  key: string,
+  reason?: string,
+): Promise<boolean> {
+  const archived = await archiveSession(state, key, reason);
+  if (!archived) {
+    return false;
+  }
+  await loadSessions(state);
+  return true;
+}
+
+export async function restoreSession(state: SessionsState, key: string): Promise<boolean> {
+  if (!state.client || !state.connected) {
+    return false;
+  }
+  if (state.sessionsLoading) {
+    return false;
+  }
+  state.sessionsLoading = true;
+  state.sessionsError = null;
+  try {
+    await state.client.request("sessions.restore", { key });
+    return true;
+  } catch (err) {
+    state.sessionsError = String(err);
+    return false;
+  } finally {
+    state.sessionsLoading = false;
+  }
+}
+
+export async function restoreSessionAndRefresh(state: SessionsState, key: string): Promise<boolean> {
+  const restored = await restoreSession(state, key);
+  if (!restored) {
+    return false;
+  }
+  await loadSessions(state);
+  await loadArchivedSessions(state);
+  return true;
+}
+
+export async function loadArchivedSessions(state: SessionsState): Promise<void> {
+  if (!state.client || !state.connected) {
+    return;
+  }
+  try {
+    const res = await state.client.request<{ ok: boolean; sessions: Array<{ key: string; archivedAt?: number; archivedReason?: string }> }>(
+      "sessions.listArchived",
+      {},
+    );
+    state.sessionsArchived = res?.sessions ?? [];
+  } catch (err) {
+    state.sessionsError = String(err);
+  }
+}
+
+export async function pinSession(state: SessionsState, key: string): Promise<boolean> {
+  if (!state.client || !state.connected) {
+    return false;
+  }
+  try {
+    await state.client.request("sessions.pin", { key });
+    await loadSessions(state);
+    return true;
+  } catch (err) {
+    state.sessionsError = String(err);
+    return false;
+  }
+}
+
+export async function unpinSession(state: SessionsState, key: string): Promise<boolean> {
+  if (!state.client || !state.connected) {
+    return false;
+  }
+  try {
+    await state.client.request("sessions.unpin", { key });
+    await loadSessions(state);
+    return true;
+  } catch (err) {
+    state.sessionsError = String(err);
+    return false;
+  }
+}
+
+export async function deleteArchivedSessionPermanently(
+  state: SessionsState,
+  key: string,
+): Promise<boolean> {
+  if (!state.client || !state.connected) {
+    return false;
+  }
+  const confirmed = window.confirm(
+    `Permanently delete archived session "${key}"?\n\nThis action cannot be undone.`,
+  );
+  if (!confirmed) {
+    return false;
+  }
+  try {
+    await state.client.request("sessions.deleteArchived", { key });
+    await loadArchivedSessions(state);
+    return true;
+  } catch (err) {
+    state.sessionsError = String(err);
+    return false;
+  }
 }

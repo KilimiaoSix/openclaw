@@ -7,6 +7,14 @@ import {
   type SessionEntry,
   updateSessionStore,
 } from "../../config/sessions.js";
+import {
+  archiveSession,
+  deleteArchivedSession,
+  listArchivedSessions,
+  pinSession,
+  restoreSession,
+  unpinSession,
+} from "../../config/sessions/archive.js";
 import { normalizeAgentId, parseAgentSessionKey } from "../../routing/session-key.js";
 import { GATEWAY_CLIENT_IDS } from "../protocol/client-info.js";
 import {
@@ -443,5 +451,96 @@ export const sessionsHandlers: GatewayRequestHandlers = {
       },
       undefined,
     );
+  },
+  "sessions.archive": async ({ params, respond, client, isWebchatConnect }) => {
+    if (rejectWebchatSessionMutation({ action: "delete", client, isWebchatConnect, respond })) {
+      return;
+    }
+    const p = params as { key?: unknown; reason?: unknown };
+    const key = requireSessionKey(p.key, respond);
+    if (!key) {
+      return;
+    }
+
+    const { storePath } = resolveGatewaySessionTargetFromKey(key);
+    const reason = typeof p.reason === "string" ? p.reason.trim() || undefined : undefined;
+
+    const archived = await archiveSession({ storePath, sessionKey: key, reason });
+    if (!archived) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "Session not found or already archived"));
+      return;
+    }
+
+    respond(true, { ok: true, key, archived: true }, undefined);
+  },
+  "sessions.restore": async ({ params, respond }) => {
+    const p = params as { key?: unknown };
+    const key = requireSessionKey(p.key, respond);
+    if (!key) {
+      return;
+    }
+
+    const { storePath } = resolveGatewaySessionTargetFromKey(key);
+    const entry = await restoreSession({ storePath, sessionKey: key });
+    if (!entry) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "Session not found in archive"));
+      return;
+    }
+
+    respond(true, { ok: true, key, restored: true, entry }, undefined);
+  },
+  "sessions.listArchived": ({ params, respond }) => {
+    const cfg = loadConfig();
+    const { storePath } = loadCombinedSessionStoreForGateway(cfg);
+    const archived = listArchivedSessions({ storePath });
+    respond(true, { ok: true, sessions: archived }, undefined);
+  },
+  "sessions.pin": async ({ params, respond }) => {
+    const p = params as { key?: unknown };
+    const key = requireSessionKey(p.key, respond);
+    if (!key) {
+      return;
+    }
+
+    const { storePath } = resolveGatewaySessionTargetFromKey(key);
+    const pinned = await pinSession({ storePath, sessionKey: key });
+    if (!pinned) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "Session not found"));
+      return;
+    }
+
+    respond(true, { ok: true, key, pinned: true }, undefined);
+  },
+  "sessions.unpin": async ({ params, respond }) => {
+    const p = params as { key?: unknown };
+    const key = requireSessionKey(p.key, respond);
+    if (!key) {
+      return;
+    }
+
+    const { storePath } = resolveGatewaySessionTargetFromKey(key);
+    const unpinned = await unpinSession({ storePath, sessionKey: key });
+    if (!unpinned) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "Session not found"));
+      return;
+    }
+
+    respond(true, { ok: true, key, unpinned: true }, undefined);
+  },
+  "sessions.deleteArchived": async ({ params, respond }) => {
+    const p = params as { key?: unknown };
+    const key = requireSessionKey(p.key, respond);
+    if (!key) {
+      return;
+    }
+
+    const { storePath } = resolveGatewaySessionTargetFromKey(key);
+    const deleted = await deleteArchivedSession({ storePath, sessionKey: key });
+    if (!deleted) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "Archived session not found"));
+      return;
+    }
+
+    respond(true, { ok: true, key, deleted: true }, undefined);
   },
 };
